@@ -285,6 +285,41 @@ def understanding_level_general():
     # 导出DataFrame到excel文件
     df_data.to_excel('../output/understanding_level_output.xlsx', index=False)
 
+    # 了解情况
+    know_nothing_num = 0
+    not_know_enough_num = 0
+    general_num = 0
+    know_well_num = 0
+    know_very_well_num = 0
+
+    for understanding_level in understanding_level_list:
+        if understanding_level == 1:
+            know_nothing_num += 1
+        if understanding_level == 2:
+            not_know_enough_num += 1
+        if understanding_level == 3:
+            general_num += 1
+        if understanding_level == 4:
+            know_well_num += 1
+        else:
+            know_very_well_num += 1
+
+        know_nothing_ratio = '{:.1%}'.format(know_nothing_num / len(gender_list))
+        not_know_enough_ratio = '{:.1%}'.format(not_know_enough_num / len(gender_list))
+        general_ratio = '{:.1%}'.format(general_num / len(gender_list))
+        know_well_ratio = '{:.1%}'.format(know_well_num / len(gender_list))
+        know_very_well_ratio = '{:.1%}'.format(know_very_well_num / len(gender_list))
+
+        # 创建DataFrame对象
+        data = {'完全不了解': [know_nothing_num, know_nothing_ratio],
+                '不太了解': [not_know_enough_num, not_know_enough_ratio],
+                '一般': [general_num, general_ratio], '比较了解': [know_well_num, know_well_ratio],
+                '非常了解': [know_very_well_num, know_very_well_ratio]}
+        df_data = pd.DataFrame(data)
+
+        # 导出DataFrame到excel文件
+        df_data.to_excel('../output/understanding_level_output2.xlsx', index=False)
+
 
 # 高校毕业生就业城市选择情况的基本描述
 def choice_of_employment_city_general():
@@ -376,7 +411,7 @@ def gender_analysis(data_list, module):
 
 
 # 学校类别分析
-def college_analysis(data_list, module):
+def college_analysis_using_lsd(data_list, module):
     category = ['一般院校', '重点院校', '国外院校']
     normal_college_list = []
     key_college_list = []
@@ -396,11 +431,6 @@ def college_analysis(data_list, module):
     key_college_stddev = np.std(key_college_list)
     foreign_college_stddev = np.std(foreign_college_list)
 
-    # 两辆计算t和p值
-    t_statistics_of_nk, p_value_of_nk = stats.ttest_ind(normal_college_list, key_college_list)
-    t_statistics_of_nf, p_value_of_nf = stats.ttest_ind(normal_college_list, foreign_college_list)
-    t_statistics_of_kf, p_value_of_kf = stats.ttest_ind(key_college_list, foreign_college_list)
-
     # 打印结果
     print("一般院校平均值:", normal_college_avg)
     print("重点院校平均值:", key_college_avg)
@@ -408,20 +438,39 @@ def college_analysis(data_list, module):
     print("一般院校标准差:", normal_college_stddev)
     print("重点院校标准差:", key_college_stddev)
     print("外国院校标准差:", foreign_college_stddev)
-    print("t_nk:", t_statistics_of_nk)
-    print("p_nk:", p_value_of_nk)
-    print("t_nf:", t_statistics_of_nf)
-    print("p_nf:", p_value_of_nf)
-    print("t_kf:", t_statistics_of_nk)
-    print("p_kf:", p_value_of_kf)
+
+    data = pd.DataFrame({
+        'Group': ['一般院校', '重点院校', '国外院校'],
+        'Value': [
+            normal_college_list,
+            key_college_list,
+            foreign_college_list
+        ]
+    })
+
+    # 执行方差分析（ANOVA）
+    f_stat, p_value = f_oneway(*data['Value'])
+    anova_table = pd.DataFrame({'F-Statistic': f_stat, 'p-value': p_value}, index=['ANOVA'])
+
+    # 将数据展开为一维数组
+    all_values = np.concatenate(data['Value'].values)
+
+    # 生成组别标签
+    group_labels = np.repeat(data['Group'], [len(values) for values in data['Value']])
+
+    # 执行LSD方法的多重比较
+    posthoc = pairwise_tukeyhsd(all_values, group_labels)
+
+    # 打印方差分析结果
+    print("ANOVA结果：")
+    print(anova_table)
+
+    # 打印LSD方法多重比较结果
+    print("LSD方法多重比较结果：")
+    print(posthoc)
 
     # 输出表格
-    data = {'分组': category,
-            '平均数': [normal_college_avg, key_college_avg, foreign_college_avg],
-            '标准差': [normal_college_stddev, key_college_stddev, foreign_college_stddev],
-            't(一般院校和重点院校)': t_statistics_of_nk, 'p(一般院校和重点院校)': p_value_of_nk,
-            't(一般院校和国外院校)': t_statistics_of_nf, 'p(一般院校和国外院校)': p_value_of_nf,
-            't(重点院校和国外院校)': t_statistics_of_kf, 'p(重点院校和国外院校)': p_value_of_kf}
+    data = {'F': [f_stat], 'P': [p_value]}
     df_data = pd.DataFrame(data)
     df_data.to_excel('../output/' + module + '_college_output.xlsx', index=False)
 
@@ -560,6 +609,10 @@ def major_analysis_using_lsd(data_list, module):
     print("ANOVA结果：")
     print(anova_table)
 
+    # 打印LSD方法多重比较结果
+    print("LSD方法多重比较结果：")
+    print(posthoc)
+
     data = {'F': [f_stat], 'P': [p_value]}
     df_data = pd.DataFrame(data)
     df_data.to_excel('../output/' + module + '_major_analysis_using_lsd_output.xlsx', index=False)
@@ -584,20 +637,20 @@ def draw_pie_chart(labels, sizes, title):
 
 if __name__ == "__main__":
     # 人才政策是否会影响就业城市的选择
-    talent_policy_affects_employment_city()
+    # talent_policy_affects_employment_city()
 
     # 样本基本描述
-    sample_basic_description()
+    # sample_basic_description()
 
     # 高校毕业生对人才政策了解的描述及差异分析
-    understanding_level_general()
-    gender_analysis(understanding_level_list, "understanding_level")
-    college_analysis(understanding_level_list, "understanding_level")
-    political_status_analysis(understanding_level_list, "understanding_level")
+    # understanding_level_general()
+    # gender_analysis(understanding_level_list, "understanding_level")
+    college_analysis_using_lsd(understanding_level_list, "understanding_level")
+    # political_status_analysis(understanding_level_list, "understanding_level")
 
     # 高校毕业生就业城市选择的描述及差异分析
-    choice_of_employment_city_general()
-    college_analysis(best_location, "employment_city")
-    political_status_analysis(best_location, "employment_city")
-    place_of_domicile_analysis(best_location, "employment_city")
+    # choice_of_employment_city_general()
+    college_analysis_using_lsd(best_location, "employment_city")
+    # political_status_analysis(best_location, "employment_city")
+    # place_of_domicile_analysis(best_location, "employment_city")
     major_analysis_using_lsd(best_location, "employment_city")
